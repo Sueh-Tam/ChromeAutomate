@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ChromeAutomate</title>
+  <link rel="stylesheet" href="sidepanel.css" />
+</head>
+
+<body>
+  <div class="app">
+    <!-- Header & Flow Management -->
+    <header class="header">
+      <div class="header-top">
+        <div class="brand">
+          <span class="brand-icon">⚡</span>
+          <span class="brand-name">ChromeAutomate</span>
+        </div>
+        <div class="header-actions">
+          <button id="btnToggleSettings" class="icon-btn" title="Configurações">⚙️</button>
+          <button id="btnExportFlow" class="icon-btn" title="Exportar JSON">⬇️</button>
+          <button id="btnImportFlow" class="icon-btn" title="Importar JSON">⬆️</button>
+          <input id="fileImportInput" type="file" accept=".json,application/json" hidden />
+        </div>
+      </div>
+
+      <div class="flow-bar">
+        <select id="flowSelect" class="flow-select" title="Selecionar automação"></select>
+        <button id="btnNewFlow" class="btn-sm" title="Nova automação">+ Nova</button>
+        <button id="btnRenameFlow" class="btn-sm" title="Renomear">✏️</button>
+        <button id="btnDeleteFlow" class="btn-sm btn-danger-ghost" title="Excluir automação">🗑</button>
+      </div>
+    </header>
+
+    <!-- Settings Panel (collapsible) -->
+    <section id="settingsPanel" class="settings-panel hidden">
+      <div class="settings-grid">
+        <label class="field-inline">
+          <span>Delay entre passos (ms)</span>
+          <input id="settingStepDelay" type="number" min="0" step="50" />
+        </label>
+        <label class="field-inline">
+          <span>Timeout elemento (ms)</span>
+          <input id="settingTimeout" type="number" min="500" step="500" />
+        </label>
+      </div>
+      <label class="checkbox-inline">
+        <input id="settingStopOnError" type="checkbox" />
+        <span>Parar automação se ocorrer erro</span>
+      </label>
+    </section>
+
+    <!-- Main Controls -->
+    <section class="controls">
+      <button id="btnRecord" class="btn btn-record">
+        <span class="dot"></span>
+        <span>Gravar</span>
+      </button>
+      <button id="btnRun" class="btn btn-run">
+        <span>▶ Executar</span>
+      </button>
+      <button id="btnPause" class="btn btn-pause hidden">
+        <span>⏸ Pausar</span>
+      </button>
+      <button id="btnStopExec" class="btn btn-stop hidden">
+        <span>⏹ Parar</span>
+      </button>
+    </section>
+
+    <!-- Recording Target Indicator -->
+    <div id="recordTargetBanner" class="target-banner hidden">
+      <span>🔴 Gravando dentro de: <strong id="recordTargetLabel"></strong></span>
+      <button id="btnClearRecordTarget" class="btn-link">Voltar à raiz</button>
+    </div>
+
+    <!-- Status Bar -->
+    <div id="statusBar" class="status-bar status-idle">
+      <span id="statusText">Pronto para gravar ou executar.</span>
+    </div>
+
+    <!-- Block Palette -->
+    <section class="palette">
+      <div class="palette-label">Adicionar bloco:</div>
+      <div class="palette-buttons">
+        <button class="chip-add chip-loop" data-add-block="loop_list">🔁 Repetir Lista</button>
+        <button class="chip-add chip-loop" data-add-block="loop_count">🔄 Repetir N×</button>
+        <button class="chip-add chip-logic" data-add-block="if_condition">❓ Se (Condição)</button>
+        <button class="chip-add chip-action" data-add-block="type">✏️ Digitar</button>
+        <button class="chip-add chip-action" data-add-block="click">🖱️ Clicar</button>
+        <button class="chip-add chip-action" data-add-block="checkbox">☑️ Checklist</button>
+        <button class="chip-add chip-util" data-add-block="wait">⏱ Aguardar</button>
+        <button class="chip-add chip-util" data-add-block="set_var">🏷️ Variável</button>
+        <button class="chip-add chip-util" data-add-block="continue">⏭ Pular</button>
+        <button class="chip-add chip-util" data-add-block="break">🛑 Parar Loop</button>
+      </div>
+    </section>
+
+    <!-- Contextual Helper Banner (wrap root steps into loop) -->
+    <div id="wrapHelperBanner" class="helper-banner hidden">
+      <span>Repetir estes passos para uma lista (ex: números separados por vírgula)?</span>
+      <button id="btnWrapInLoop" class="btn-sm btn-primary">🔁 Envolver em Repetir Lista</button>
+    </div>
+
+    <!-- Blocks Canvas -->
+    <main id="blocksContainer" class="blocks-container"></main>
+  </div>
+
+  <script type="module" src="sidepanel.js"></script>
+</body>
+
+</html>

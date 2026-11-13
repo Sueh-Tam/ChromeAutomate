@@ -150,3 +150,35 @@ test('runFlow stops cleanly when controller.shouldStop() becomes true', async ()
   assert.equal(clicks, 2);
 });
 
+test('runFlow reports activeLoops with the current item while iterating array in LOOP_LIST', async () => {
+  const flow = createDefaultFlow('Loop Current Item Test');
+  flow.settings.stepDelayMs = 0;
+
+  const loop = createBlock(BLOCK_TYPES.LOOP_LIST, {
+    listText: '1001, 1002, 1003',
+    children: [createBlock(BLOCK_TYPES.CLICK, { target: { primary: '#btn' } })],
+  });
+  flow.blocks.push(loop);
+
+  const loopSnapshots = [];
+  const driver = {
+    async executeAction() {},
+    async checkCondition() { return true; },
+    async wait() {},
+    onProgress(info) {
+      if (info.activeLoops && info.activeLoops[loop.id]) {
+        loopSnapshots.push({ ...info.activeLoops[loop.id] });
+      }
+    },
+  };
+
+  const result = await runFlow(flow, driver, createMockController());
+  assert.equal(result.status, 'completed');
+
+  // Verify that activeLoops captured each item being processed
+  const itemsProcessed = loopSnapshots.map((s) => `${s.item} (${s.index}/${s.total})`);
+  assert.ok(itemsProcessed.includes('1001 (1/3)'));
+  assert.ok(itemsProcessed.includes('1002 (2/3)'));
+  assert.ok(itemsProcessed.includes('1003 (3/3)'));
+});
+

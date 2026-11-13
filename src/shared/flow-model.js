@@ -288,6 +288,61 @@ export function duplicateBlock(block) {
   return cloned;
 }
 
+export function isDescendant(parentBlock, candidateChildId) {
+  if (!parentBlock || !candidateChildId) return false;
+  for (const childInfo of getChildLists(parentBlock)) {
+    for (const child of childInfo.list) {
+      if (child.id === candidateChildId) return true;
+      if (isDescendant(child, candidateChildId)) return true;
+    }
+  }
+  return false;
+}
+
+export function moveBlockToPosition(flow, sourceBlockId, targetParentId = null, targetBranch = null, targetIndex = null) {
+  if (!flow || !Array.isArray(flow.blocks) || !sourceBlockId) return false;
+  const loc = findBlockLocation(flow.blocks, sourceBlockId);
+  if (!loc) return false;
+
+  // Cannot drop a block into itself or any of its descendants
+  if (targetParentId) {
+    if (targetParentId === sourceBlockId) return false;
+    if (isDescendant(loc.block, targetParentId)) return false;
+  }
+
+  // Determine target list
+  let targetList;
+  if (!targetParentId) {
+    targetList = flow.blocks;
+  } else {
+    const parentLoc = findBlockLocation(flow.blocks, targetParentId);
+    if (!parentLoc) return false;
+    const branch = targetBranch || 'children';
+    if (!Array.isArray(parentLoc.block[branch])) {
+      parentLoc.block[branch] = [];
+    }
+    targetList = parentLoc.block[branch];
+  }
+
+  // Remove block from current location
+  const [removed] = loc.list.splice(loc.index, 1);
+
+  // If moving within the same list and targetIndex was beyond the original index,
+  // compensate for the removal
+  let insertIdx = targetIndex;
+  if (loc.list === targetList && typeof targetIndex === 'number' && loc.index < targetIndex) {
+    insertIdx = targetIndex - 1;
+  }
+
+  if (typeof insertIdx !== 'number' || insertIdx < 0 || insertIdx >= targetList.length) {
+    targetList.push(removed);
+  } else {
+    targetList.splice(insertIdx, 0, removed);
+  }
+
+  return true;
+}
+
 export function insertBlockIntoFlow(flow, newBlock, containerTarget = null) {
   if (containerTarget && containerTarget.parentId) {
     const loc = findBlockLocation(flow.blocks, containerTarget.parentId);

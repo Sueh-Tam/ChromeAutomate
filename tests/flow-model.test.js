@@ -8,7 +8,9 @@ import {
   duplicateBlock,
   interpolate,
   interpolateTarget,
+  isDescendant,
   moveBlock,
+  moveBlockToPosition,
   parseBooleanLike,
   parseListInput,
   removeBlock,
@@ -90,5 +92,39 @@ test('moveBlock, duplicateBlock, removeBlock, and collectAvailableVars work recu
   const removed = removeBlock(flow.blocks, firstId);
   assert.equal(removed.id, firstId);
   assert.equal(loop.children.length, 1);
+});
+
+test('moveBlockToPosition and isDescendant support drag-and-drop reordering, nesting, and cycle prevention', () => {
+  const flow = createDefaultFlow('Drag Test');
+  const b1 = createBlock(BLOCK_TYPES.TYPE, { value: 'B1' });
+  const b2 = createBlock(BLOCK_TYPES.CLICK, { note: 'B2' });
+  const loop = createBlock(BLOCK_TYPES.LOOP_LIST, {
+    listText: '1,2,3',
+    children: [
+      createBlock(BLOCK_TYPES.CHECKBOX, { note: 'L1' }),
+    ],
+  });
+  flow.blocks.push(b1, b2, loop);
+
+  // 1. Reorder at root: drag b1 after b2
+  assert.equal(moveBlockToPosition(flow, b1.id, null, null, 2), true);
+  assert.deepEqual(flow.blocks.map((b) => b.id), [b2.id, b1.id, loop.id]);
+
+  // 2. Drag root block (b1) inside loop
+  assert.equal(moveBlockToPosition(flow, b1.id, loop.id, 'children', 0), true);
+  assert.deepEqual(flow.blocks.map((b) => b.id), [b2.id, loop.id]);
+  assert.equal(loop.children[0].id, b1.id);
+  assert.equal(loop.children[1].note, 'L1');
+
+  // 3. Drag child (b1) back out to root at index 0
+  assert.equal(moveBlockToPosition(flow, b1.id, null, null, 0), true);
+  assert.deepEqual(flow.blocks.map((b) => b.id), [b1.id, b2.id, loop.id]);
+  assert.equal(loop.children.length, 1);
+
+  // 4. Cycle prevention: cannot drag loop into its own child or itself
+  assert.equal(isDescendant(loop, loop.children[0].id), true);
+  assert.equal(isDescendant(loop, b1.id), false);
+  assert.equal(moveBlockToPosition(flow, loop.id, loop.id, 'children', 0), false);
+  assert.equal(moveBlockToPosition(flow, loop.id, loop.children[0].id, 'children', 0), false);
 });
 

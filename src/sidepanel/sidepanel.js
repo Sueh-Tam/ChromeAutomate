@@ -9,12 +9,28 @@ import {
   findBlockLocation,
   insertBlockIntoFlow,
   moveBlock,
+  moveBlockToPosition,
   parseListInput,
   removeBlock,
   wrapRootBlocksInLoopList,
 } from '../shared/flow-model.js';
 
 const STORAGE_KEY = 'ca_workspace_v1';
+
+let draggedBlockId = null;
+let dragAllowed = false;
+
+function clearAllDragIndicators() {
+  document.querySelectorAll('.is-dragging').forEach((el) => el.classList.remove('is-dragging'));
+  document.querySelectorAll('.drop-target-top').forEach((el) => el.classList.remove('drop-target-top'));
+  document.querySelectorAll('.drop-target-bottom').forEach((el) => el.classList.remove('drop-target-bottom'));
+  document.querySelectorAll('.drop-target-branch').forEach((el) => el.classList.remove('drop-target-branch'));
+  blocksContainer?.classList.remove('drop-target-container');
+}
+
+window.addEventListener('mouseup', () => {
+  dragAllowed = false;
+});
 
 const appState = {
   flows: [],
@@ -187,6 +203,35 @@ function renderStatusAndControls() {
       activeCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
   }
+
+  // Update live loop current item badges & banners
+  const activeLoops = appState.execution?.activeLoops || {};
+  document.querySelectorAll('[data-loop-banner]').forEach((banner) => {
+    const loopId = banner.getAttribute('data-loop-banner');
+    const loopInfo = activeLoops[loopId];
+    if (loopInfo) {
+      banner.classList.remove('hidden');
+      const valEl = banner.querySelector('.loop-live-val');
+      const counterEl = banner.querySelector('.loop-live-counter');
+      if (valEl) valEl.textContent = loopInfo.type === 'count' ? `Ciclo ${loopInfo.item}` : `"${loopInfo.item}"`;
+      if (counterEl) counterEl.textContent = `(${loopInfo.index} de ${loopInfo.total})`;
+    } else {
+      banner.classList.add('hidden');
+    }
+  });
+
+  document.querySelectorAll('[data-loop-pill]').forEach((pill) => {
+    const loopId = pill.getAttribute('data-loop-pill');
+    const loopInfo = activeLoops[loopId];
+    if (loopInfo) {
+      pill.classList.remove('hidden');
+      pill.textContent = loopInfo.type === 'count'
+        ? `▶ Ciclo ${loopInfo.item} (${loopInfo.index}/${loopInfo.total})`
+        : `▶ ${loopInfo.item} (${loopInfo.index}/${loopInfo.total})`;
+    } else {
+      pill.classList.add('hidden');
+    }
+  });
 }
 
 function getBlockMeta(type) {
@@ -349,6 +394,35 @@ function renderBranch(flow, parentBlock, branchKey, branchLabel, blocks) {
   const section = document.createElement('div');
   section.className = 'branch-section';
 
+  section.addEventListener('dragover', (e) => {
+    if (!draggedBlockId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    section.classList.add('drop-target-branch');
+  });
+
+  section.addEventListener('dragleave', (e) => {
+    if (!section.contains(e.relatedTarget)) {
+      section.classList.remove('drop-target-branch');
+    }
+  });
+
+  section.addEventListener('drop', (e) => {
+    if (!draggedBlockId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const sourceId = draggedBlockId;
+    clearAllDragIndicators();
+
+    const targetIndex = blocks ? blocks.length : 0;
+    const moved = moveBlockToPosition(flow, sourceId, parentBlock.id, branchKey, targetIndex);
+    if (moved) {
+      saveFlows(true);
+      renderBlocks();
+    }
+  });
+
   const header = document.createElement('div');
   header.className = 'branch-header';
 
@@ -405,16 +479,91 @@ function renderBlockCard(flow, block) {
   const card = document.createElement('div');
   card.className = `block-card block-type-${block.type}${block.enabled === false ? ' disabled-block' : ''}`;
   card.dataset.blockId = block.id;
+  card.draggable = true;
+
   if (appState.execution.currentBlockId === block.id) {
     card.classList.add('executing');
   }
 
+  // Drag & drop handlers on block card
+  card.addEventListener('dragstart', (e) => {
+    if (!dragAllowed) {
+      e.preventDefault();
+      return;
+    }
+    draggedBlockId = block.id;
+    card.classList.add('is-dragging');
+    e.dataTransfer.setData('text/plain', block.id);
+    e.dataTransfer.effectAllowed = 'move';
+  });
+
+  card.addEventListener('dragend', () => {
+    dragAllowed = false;
+    draggedBlockId = null;
+    clearAllDragIndicators();
+  });
+
+  card.addEventListener('dragover', (e) => {
+    if (!draggedBlockId || draggedBlockId === block.id) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+
+    const rect = card.getBoundingClientRect();
+    const isTop = e.clientY - rect.top < rect.height / 2;
+    card.classList.toggle('drop-target-top', isTop);
+    card.classList.toggle('drop-target-bottom', !isTop);
+  });
+
+  card.addEventListener('dragleave', (e) => {
+    if (!card.contains(e.relatedTarget)) {
+      card.classList.remove('drop-target-top', 'drop-target-bottom');
+    }
+  });
+
+  card.addEventListener('drop', (e) => {
+    if (!draggedBlockId || draggedBlockId === block.id) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const rect = card.getBoundingClientRect();
+    const isTop = e.clientY - rect.top < rect.height / 2;
+    const sourceId = draggedBlockId;
+    clearAllDragIndicators();
+
+    const locTarget = findBlockLocation(flow.blocks, block.id);
+    if (!locTarget) return;
+
+    const targetIndex = isTop ? locTarget.index : locTarget.index + 1;
+    const targetParentId = locTarget.parent ? locTarget.parent.id : null;
+    const targetBranch = locTarget.branch || null;
+
+    const moved = moveBlockToPosition(flow, sourceId, targetParentId, targetBranch, targetIndex);
+    if (moved) {
+      saveFlows(true);
+      renderBlocks();
+    }
+  });
+
   // Header
   const header = document.createElement('div');
   header.className = 'block-header';
+  header.addEventListener('mousedown', (e) => {
+    if (!e.target.closest('button, input, select, textarea, a, .var-chip, .mini-btn')) {
+      dragAllowed = true;
+    }
+  });
 
   const titleWrap = document.createElement('div');
   titleWrap.className = 'block-title-wrap';
+
+  const dragHandle = document.createElement('span');
+  dragHandle.className = 'drag-handle';
+  dragHandle.textContent = '⋮⋮';
+  dragHandle.title = 'Arraste para mover o bloco';
+  dragHandle.addEventListener('mousedown', () => {
+    dragAllowed = true;
+  });
 
   const badge = document.createElement('span');
   badge.className = 'block-badge';
@@ -431,7 +580,14 @@ function renderBlockCard(flow, block) {
     summary.textContent = formatTargetSummary(block.target);
   }
 
-  titleWrap.append(badge, summary);
+  titleWrap.append(dragHandle, badge, summary);
+
+  if (block.type === BLOCK_TYPES.LOOP_LIST || block.type === BLOCK_TYPES.LOOP_COUNT) {
+    const livePill = document.createElement('span');
+    livePill.className = 'loop-live-pill hidden';
+    livePill.setAttribute('data-loop-pill', block.id);
+    titleWrap.appendChild(livePill);
+  }
 
   const actions = document.createElement('div');
   actions.className = 'block-actions';
@@ -493,6 +649,16 @@ function renderBlockCard(flow, block) {
     case BLOCK_TYPES.LOOP_LIST: {
       const grp = document.createElement('div');
       grp.className = 'field-group';
+
+      const liveBanner = document.createElement('div');
+      liveBanner.className = 'loop-live-banner hidden';
+      liveBanner.setAttribute('data-loop-banner', block.id);
+      liveBanner.innerHTML = `
+        <span class="loop-live-pulse"></span>
+        <span class="loop-live-label">Item atual:</span>
+        <span class="loop-live-val"></span>
+        <span class="loop-live-counter"></span>
+      `;
 
       const lbl = document.createElement('div');
       lbl.className = 'field-label';
@@ -562,7 +728,7 @@ function renderBlockCard(flow, block) {
       varGrp.append(varLbl, varInp);
 
       row2.append(sepGrp, varGrp);
-      grp.append(lbl, ta, row2);
+      grp.append(liveBanner, lbl, ta, row2);
       body.appendChild(grp);
 
       body.appendChild(
@@ -572,6 +738,17 @@ function renderBlockCard(flow, block) {
     }
 
     case BLOCK_TYPES.LOOP_COUNT: {
+      const liveBanner = document.createElement('div');
+      liveBanner.className = 'loop-live-banner hidden';
+      liveBanner.setAttribute('data-loop-banner', block.id);
+      liveBanner.innerHTML = `
+        <span class="loop-live-pulse"></span>
+        <span class="loop-live-label">Ciclo atual:</span>
+        <span class="loop-live-val"></span>
+        <span class="loop-live-counter"></span>
+      `;
+      body.appendChild(liveBanner);
+
       const row2 = document.createElement('div');
       row2.className = 'row-2';
 
@@ -1160,6 +1337,34 @@ btnWrapInLoop.addEventListener('click', () => {
   wrapRootBlocksInLoopList(flow, '');
   saveFlows(true);
   renderAll();
+});
+
+// Allow dropping into the main canvas
+blocksContainer.addEventListener('dragover', (e) => {
+  if (!draggedBlockId) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  blocksContainer.classList.add('drop-target-container');
+});
+
+blocksContainer.addEventListener('dragleave', (e) => {
+  if (!blocksContainer.contains(e.relatedTarget)) {
+    blocksContainer.classList.remove('drop-target-container');
+  }
+});
+
+blocksContainer.addEventListener('drop', (e) => {
+  if (!draggedBlockId) return;
+  e.preventDefault();
+  const sourceId = draggedBlockId;
+  clearAllDragIndicators();
+  const flow = getActiveFlow();
+  if (!flow) return;
+  const moved = moveBlockToPosition(flow, sourceId, null, null, flow.blocks.length);
+  if (moved) {
+    saveFlows(true);
+    renderBlocks();
+  }
 });
 
 // Palette add-block buttons

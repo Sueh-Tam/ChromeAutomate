@@ -57,6 +57,7 @@ export async function runFlow(flow, driver, controller) {
   };
 
   const vars = {};
+  const activeLoops = {};
   let loopContextLabel = '';
   let stepsExecuted = 0;
 
@@ -87,6 +88,7 @@ export async function runFlow(flow, driver, controller) {
       currentBlockId: blockId,
       summary: `${prefix}${summary}`,
       vars: { ...vars },
+      activeLoops: { ...activeLoops },
       stepsExecuted,
     });
   };
@@ -168,13 +170,22 @@ export async function runFlow(flow, driver, controller) {
             vars.indice = i + 1;
             loopContextLabel = `Item ${i + 1}/${items.length}: "${items[i]}"`;
 
-            report(block.id, `Processando`);
+            activeLoops[block.id] = {
+              item: items[i],
+              index: i + 1,
+              total: items.length,
+              varName: itemVar,
+              type: 'list',
+            };
+
+            report(block.id, `Processando item "${items[i]}" (${i + 1}/${items.length})`);
             const signal = await execBlockList(block.children || []);
             if (signal === SIGNAL_BREAK) {
               break;
             }
           }
         } finally {
+          delete activeLoops[block.id];
           loopContextLabel = prevContext;
           if (prevItem === undefined) delete vars[itemVar];
           else vars[itemVar] = prevItem;
@@ -203,7 +214,16 @@ export async function runFlow(flow, driver, controller) {
             vars[indexVar] = i;
             vars.indice = i;
             loopContextLabel = `Ciclo ${i}/${count}`;
-            report(block.id, `Executando ciclo`);
+
+            activeLoops[block.id] = {
+              item: String(i),
+              index: i,
+              total: count,
+              varName: indexVar,
+              type: 'count',
+            };
+
+            report(block.id, `Executando ciclo ${i}/${count}`);
 
             const signal = await execBlockList(block.children || []);
             if (signal === SIGNAL_BREAK) {
@@ -211,6 +231,7 @@ export async function runFlow(flow, driver, controller) {
             }
           }
         } finally {
+          delete activeLoops[block.id];
           loopContextLabel = prevContext;
           if (prevVar === undefined) delete vars[indexVar];
           else vars[indexVar] = prevVar;
@@ -277,6 +298,7 @@ export async function runFlow(flow, driver, controller) {
       currentBlockId: null,
       summary: `Concluído com sucesso (${stepsExecuted} ações executadas).`,
       vars: { ...vars },
+      activeLoops: {},
       stepsExecuted,
     });
     return { status: 'completed', stepsExecuted };
@@ -287,6 +309,7 @@ export async function runFlow(flow, driver, controller) {
         currentBlockId: null,
         summary: `Execução interrompida pelo usuário (${stepsExecuted} ações).`,
         vars: { ...vars },
+        activeLoops: {},
         stepsExecuted,
       });
       return { status: 'stopped', stepsExecuted };
@@ -297,6 +320,7 @@ export async function runFlow(flow, driver, controller) {
       summary: `Erro: ${err?.message || String(err)}`,
       error: err?.message || String(err),
       vars: { ...vars },
+      activeLoops: {},
       stepsExecuted,
     });
     return { status: 'error', error: err?.message || String(err), stepsExecuted };

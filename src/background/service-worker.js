@@ -22,6 +22,7 @@ const state = {
     currentBlockId: null,
     summary: 'Pronto para gravar ou executar.',
     vars: {},
+    activeLoops: {},
     stepsExecuted: 0,
     tabId: null,
   },
@@ -180,6 +181,7 @@ async function handleStartExecution(flow) {
     currentBlockId: null,
     summary: 'Iniciando automação...',
     vars: {},
+    activeLoops: {},
     stepsExecuted: 0,
     tabId: tab.id,
   };
